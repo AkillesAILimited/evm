@@ -9,8 +9,12 @@ def call(command):
         sys.exit(r)
 
 
-def main():
+def make():
     call(f'go install github.com/mohanson/evm/cmd/evm')
+
+
+def main():
+    make()
 
 
 if __name__ == '__main__':

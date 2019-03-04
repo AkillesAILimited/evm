@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -59,29 +60,68 @@ func exDisasm() error {
 	return nil
 }
 
+func exInsert() error {
+	var (
+		flAddress = flag.String("address", "0x00", "")
+		flBalance = flag.String("balance", "0x00", "")
+		flCode    = flag.String("code", "0x", "")
+		flDB      = flag.String("db", "db.json", "")
+		flNonce   = flag.String("nonce", "0x00", "")
+		flStorage = flag.String("storage", "", "k=v,k=v")
+	)
+	flag.Parse()
+	d, err := state.New(common.Hash{}, state.NewDatabase(ethdb.NewMemDatabase()))
+	if err != nil {
+		return err
+	}
+	if err := evm.LoadStateDB(d, *flDB); err != nil {
+		if os.IsExist(err) {
+			return err
+		}
+	}
+	a := common.HexToAddress(*flAddress)
+	d.CreateAccount(a)
+	b, _ := new(big.Int).SetString(*flBalance, 0)
+	d.SetBalance(a, b)
+	n, _ := new(big.Int).SetString(*flNonce, 0)
+	d.SetNonce(a, n.Uint64())
+	c := common.FromHex(*flCode)
+	d.SetCode(a, c)
+	if *flStorage != "" {
+		for _, e := range strings.Split(*flStorage, ",") {
+			seps := strings.Split(e, "=")
+			k := seps[0]
+			v := seps[1]
+			d.SetState(a, common.HexToHash(k), common.HexToHash(v))
+		}
+	}
+	return evm.SaveStateDB(d, *flDB)
+}
+
 func exMacall(subcmd string) error {
 	var (
 		flAddress     = flag.String("address", "", "address")
-		flBlockNumber = flag.Int("number", 0, "block number")
+		flBlockNumber = flag.String("number", "", "block number")
 		flCode        = flag.String("code", "", "bytecode")
 		flCoinbase    = flag.String("coinbase", "", "coinbase")
 		flData        = flag.String("data", "", "data")
-		flDB          = flag.String("db", "", "database")
-		flDifficulty  = flag.Int("difficulty", 0, "difficulty")
-		flGasLimit    = flag.Int("gaslimit", 100000, "gas limit")
-		flGasPrice    = flag.Int("gasprice", 1, "gas price")
+		flDB          = flag.String("db", "db.json", "database")
+		flDifficulty  = flag.String("difficulty", "", "difficulty")
+		flGasLimit    = flag.String("gaslimit", "100000", "gas limit")
+		flGasPrice    = flag.String("gasprice", "1", "gas price")
 		flOrigin      = flag.String("origin", "", "sender")
-		flValue       = flag.Int64("value", 0, "value")
+		flValue       = flag.String("value", "", "value")
 	)
 	flag.Parse()
 	cfg := runtime.Config{}
-	cfg.BlockNumber = big.NewInt(int64(*flBlockNumber))
+	cfg.BlockNumber, _ = new(big.Int).SetString(*flBlockNumber, 0)
 	cfg.Coinbase = common.HexToAddress(*flCoinbase)
-	cfg.Difficulty = big.NewInt(int64(*flDifficulty))
-	cfg.GasLimit = uint64(*flGasLimit)
-	cfg.GasPrice = big.NewInt(int64(*flGasPrice))
+	cfg.Difficulty, _ = new(big.Int).SetString(*flDifficulty, 0)
+	gasLimitBig, _ := new(big.Int).SetString(*flGasLimit, 0)
+	cfg.GasLimit = gasLimitBig.Uint64()
+	cfg.GasPrice, _ = new(big.Int).SetString(*flGasPrice, 0)
 	cfg.Origin = common.HexToAddress(*flOrigin)
-	cfg.Value = big.NewInt(*flValue)
+	cfg.Value, _ = new(big.Int).SetString(*flValue, 0)
 	cfg.EVMConfig.Debug = true
 	slg := vm.NewStructLogger(nil)
 	cfg.EVMConfig.Tracer = slg
@@ -117,7 +157,7 @@ func exMacall(subcmd string) error {
 		}
 		vm.WriteTrace(os.Stdout, slg.StructLogs())
 		fmt.Println()
-		fmt.Println("Cost    =", *flGasLimit-int(gas))
+		fmt.Println("Cost    =", cfg.GasLimit-gas)
 		fmt.Println("Address =", add.String())
 		return evm.SaveStateDB(sdb, *flDB)
 	case "call":
@@ -127,7 +167,7 @@ func exMacall(subcmd string) error {
 		}
 		vm.WriteTrace(os.Stdout, slg.StructLogs())
 		fmt.Println()
-		fmt.Println("Cost    =", *flGasLimit-int(gas))
+		fmt.Println("Cost    =", cfg.GasLimit-gas)
 		fmt.Println("Return  =", common.Bytes2Hex(ret))
 		return evm.SaveStateDB(sdb, *flDB)
 	}
@@ -144,6 +184,8 @@ func main() {
 	switch subCommand {
 	case "disasm":
 		err = exDisasm()
+	case "insert":
+		err = exInsert()
 	case "exec", "create", "call":
 		err = exMacall(subCommand)
 	default:
