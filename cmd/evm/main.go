@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"math/big"
@@ -100,25 +99,27 @@ func exInsert() error {
 
 func exMacall(subcmd string) error {
 	var (
-		flAddress     = flag.String("address", "", "address")
-		flBlockNumber = flag.String("number", "", "block number")
-		flCode        = flag.String("code", "", "bytecode")
-		flCoinbase    = flag.String("coinbase", "", "coinbase")
-		flData        = flag.String("data", "", "data")
-		flDB          = flag.String("db", "db.json", "database")
-		flDifficulty  = flag.String("difficulty", "", "difficulty")
-		flGasLimit    = flag.String("gaslimit", "100000", "gas limit")
-		flGasPrice    = flag.String("gasprice", "1", "gas price")
-		flOrigin      = flag.String("origin", "", "sender")
-		flValue       = flag.String("value", "", "value")
+		flAddress     = flag.String("address", "", "")
+		flBlockNumber = flag.String("number", "", "")
+		flCode        = flag.String("code", "", "")
+		flCoinbase    = flag.String("coinbase", "", "")
+		flData        = flag.String("data", "", "")
+		flDB          = flag.String("db", "db.json", "")
+		flDifficulty  = flag.String("difficulty", "", "")
+		flGasLimit    = flag.String("gaslimit", "100000", "")
+		flGasPrice    = flag.String("gasprice", "1", "")
+		flOrigin      = flag.String("origin", "", "")
+		flValue       = flag.String("value", "", "")
 	)
 	flag.Parse()
 	cfg := runtime.Config{}
 	cfg.BlockNumber, _ = new(big.Int).SetString(*flBlockNumber, 0)
 	cfg.Coinbase = common.HexToAddress(*flCoinbase)
 	cfg.Difficulty, _ = new(big.Int).SetString(*flDifficulty, 0)
-	gasLimitBig, _ := new(big.Int).SetString(*flGasLimit, 0)
-	cfg.GasLimit = gasLimitBig.Uint64()
+	cfg.GasLimit = func() uint64 {
+		a, _ := new(big.Int).SetString(*flGasLimit, 0)
+		return a.Uint64()
+	}()
 	cfg.GasPrice, _ = new(big.Int).SetString(*flGasPrice, 0)
 	cfg.Origin = common.HexToAddress(*flOrigin)
 	cfg.Value, _ = new(big.Int).SetString(*flValue, 0)
@@ -129,14 +130,9 @@ func exMacall(subcmd string) error {
 	if err != nil {
 		return err
 	}
-	if subcmd == "create" || subcmd == "call" {
-		if *flDB == "" {
-			return errors.New("evm: missing -db operand")
-		}
-		if err := evm.LoadStateDB(sdb, *flDB); err != nil {
-			if os.IsExist(err) {
-				return err
-			}
+	if err := evm.LoadStateDB(sdb, *flDB); err != nil {
+		if os.IsExist(err) {
+			return err
 		}
 	}
 	cfg.State = sdb
